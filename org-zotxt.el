@@ -204,6 +204,15 @@ If only path is available, return it.  If no paths are available, error."
         (elt paths 0)
       (completing-read "File: " (append paths nil)))))
 
+(defun to-wsl-path (path)
+  "if path is a windows path, convert it to wsl path."
+   (if (string-match "\\`\\([A-Z]\\):" path)
+       (string-join
+        `("/mnt/" ,(downcase (match-string 1 path))
+          ,(replace-regexp-in-string "\\\\" "/" (substring path 2)))
+        "")
+     path))
+
 (defun org-zotxt-open-attachment (&optional arg)
   "Open attachment of Zotero items linked at point.
 
@@ -219,7 +228,7 @@ Opens with `org-open-file', see for more information about ARG."
       (deferred:nextc it
         (lambda (response)
           (let ((paths (cdr (assq 'paths (elt (request-response-data response) 0)))))
-            (org-open-file (org-zotxt-choose-path paths) arg))))
+            (org-open-file (to-wsl-path (org-zotxt-choose-path paths)) arg))))
       (deferred:error it #'zotxt--deferred-handle-error)
       (if zotxt--debug-sync (deferred:sync! it)))))
 
