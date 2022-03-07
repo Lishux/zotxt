@@ -191,6 +191,7 @@ FORMAT is the export format, a symbol like ‘html’ or ‘latex’ or ‘ascii
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "C-c \" i") 'org-zotxt-insert-reference-link)
     (define-key map (kbd "C-c \" u") 'org-zotxt-update-reference-link-at-point)
+    (define-key map (kbd "C-c \" c") 'org-zotxt-copy-attachment-path)
     (define-key map (kbd "C-c \" a") 'org-zotxt-open-attachment)
     map))
 
@@ -213,13 +214,10 @@ If only path is available, return it.  If no paths are available, error."
         "")
      path))
 
-(defun org-zotxt-open-attachment (&optional arg)
-  "Open attachment of Zotero items linked at point.
-
-Opens with `org-open-file', see for more information about ARG."
+(defun org-zotxt-get-attachment-path ()
+  "Get attachment file path"
   (interactive "P")
-  (let ((item-id (org-zotxt-extract-link-id-at-point))
-        (arg arg))
+  (let ((item-id (org-zotxt-extract-link-id-at-point)))
     (deferred:$
       (zotxt--request-deferred
        (format "%s/items" zotxt-url-base)
@@ -228,9 +226,38 @@ Opens with `org-open-file', see for more information about ARG."
       (deferred:nextc it
         (lambda (response)
           (let ((paths (cdr (assq 'paths (elt (request-response-data response) 0)))))
-            (org-open-file (to-wsl-path (org-zotxt-choose-path paths)) arg))))
+            (to-wsl-path (org-zotxt-choose-path paths)))))
       (deferred:error it #'zotxt--deferred-handle-error)
-      (if zotxt--debug-sync (deferred:sync! it)))))
+      (if zotxt--debug-sync (deferred:sync! it)
+        (deferred:nextc it
+          (lambda (path) path))))))
+
+(defun org-zotxt-copy-attachment-path ()
+  "Open attachment of Zotero items linked at point.
+
+Opens with `org-open-file', see for more information about ARG."
+    (interactive)
+    (deferred:$
+      (deferred:next
+        (lambda ()
+          (org-zotxt-get-attachment-path)))
+      (deferred:nextc it
+        (lambda (path)
+          (kill-new path)
+          (message "%s send to system clipboard!" path)))))
+
+(defun org-zotxt-open-attachment (&optional arg)
+  "Open attachment of Zotero items linked at point.
+
+Opens with `org-open-file', see for more information about ARG."
+    (interactive "P")
+    (deferred:$
+      (deferred:next
+        (lambda ()
+          (org-zotxt-get-attachment-path)))
+      (deferred:nextc it
+        (lambda (path)
+          (org-open-file path arg)))))
 
 ;;;###autoload
 (define-minor-mode org-zotxt-mode
